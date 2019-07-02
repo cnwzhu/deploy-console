@@ -7,9 +7,12 @@ import (
 	"github.com/docker/docker/client"
 	"io"
 	"math/rand"
+	"mime/multipart"
 	"os"
 	"strconv"
+	"strings"
 	"text/template"
+	"time"
 )
 
 const (
@@ -43,7 +46,7 @@ func init() {
 	c = dockerClient
 }
 
-func DockerImageBuild(file *io.Reader, simpleBuildInfo *ImageSimpleBuildInfo, ch chan<- struct{}) {
+func DockerImageBuild(file *io.Reader, simpleBuildInfo *ImageSimpleBuildInfo, ch chan<- struct{}, header *multipart.FileHeader) {
 	defer func() {
 		if e := recover(); e != nil {
 			close(ch)
@@ -53,8 +56,9 @@ func DockerImageBuild(file *io.Reader, simpleBuildInfo *ImageSimpleBuildInfo, ch
 	var reader *io.Reader
 	switch simpleBuildInfo.Type {
 	case NGINX:
-		reader = nginxBuild(file)
+		reader = nginxBuild(file, header)
 	case JAR:
+		reader = jarBuild(file, header)
 	case TOMCAT:
 	case SELF:
 		reader = file
@@ -63,22 +67,52 @@ func DockerImageBuild(file *io.Reader, simpleBuildInfo *ImageSimpleBuildInfo, ch
 	build(reader, simpleBuildInfo, ch)
 }
 
-func nginxBuild(file *io.Reader) *io.Reader {
-	tempDir := os.TempDir() + "\\docker" + strconv.Itoa(rand.Int())
+func nginxBuild(file *io.Reader, header *multipart.FileHeader) *io.Reader {
+	source := rand.NewSource(time.Now().UnixNano())
+	rd := rand.New(source)
+	tempDir := os.TempDir() + "\\docker" + strconv.Itoa(rd.Int())
 	os.Mkdir(tempDir, os.ModePerm)
 	e := os.Chdir(tempDir)
 	if e != nil {
 		panic(e)
 	}
-	err := UnTarFiles(file, "./")
+	if strings.LastIndex(header.Filename, ".tar") > 0 {
+		err := UnTarFiles(file, "./")
+		if err != nil {
+			panic(err)
+		}
+	} else {
+		target, e := os.Create(header.Filename)
+		var t io.Writer = target
+		io.Copy(t, *file)
+		if e != nil {
+			panic(e)
+		}
+		target.Close()
+	}
+	dockerFileGen()
+	//var w io.Writer = buffer
+	//Tars(dir, &w)
+	err := Tar("./", "docker.tar", false)
 	if err != nil {
 		panic(err)
 	}
+	//var reader io.Reader = bytes.NewReader(buffer.Bytes())
+	//return &reader;
+	f, err := os.Open("docker.tar")
+	if err != nil {
+		panic(err)
+	}
+	var t io.Reader = f
+	return &t
+}
+
+func dockerFileGen() {
 	i := template.New("Dockerfile")
 	parse, e := i.Parse(`FROM  {{.BaseImage}}
-MAINTAINER  {{.UserName}}  {{.Email}}
-ADD  ./*   /usr/share/nginx/html/
-EXPOSE  80`)
+	MAINTAINER  {{.UserName}}  {{.Email}}
+	ADD  ./*   /usr/share/nginx/html/
+	EXPOSE  80`)
 	if e != nil {
 		panic(e)
 	}
@@ -95,27 +129,14 @@ EXPOSE  80`)
 		panic(err)
 	}
 	dockerfile.Close()
-	//var w io.Writer = buffer
-	//Tars(dir, &w)
-	err = Tar("./", "docker.tar", false)
-	if err != nil {
-		panic(err)
-	}
-	//var reader io.Reader = bytes.NewReader(buffer.Bytes())
-	//return &reader;
-	f, err := os.Open("docker.tar")
-	if err != nil {
-		panic(err)
-	}
-	var t io.Reader = f
-	return &t
 }
 
 func tomcatBuild(file *io.Reader) *io.Reader {
 	return nil
 }
 
-func jarBuild(file *io.Reader) *io.Reader {
+func jarBuild(file *io.Reader, header *multipart.FileHeader) *io.Reader {
+
 	return nil
 }
 

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"github.com/astaxie/beego"
 	"io"
-	"log"
 	"strconv"
 )
 
@@ -34,8 +33,7 @@ func (it *FileController) Upload() {
 	r := file.(io.Reader)
 	flag := make(chan struct{})
 	defer close(flag)
-	go service.DockerImageBuild(&r, info, flag)
-	log.Println(header.Filename)
+	go service.DockerImageBuild(&r, info, flag, header)
 	<-flag
 	e = it.Ctx.Output.Body([]byte(`{"msg":"ok"}`))
 	if e != nil {
