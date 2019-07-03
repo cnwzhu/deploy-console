@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"github.com/astaxie/beego"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/client"
 	"io"
@@ -30,6 +31,10 @@ type ImageSimpleBuildInfo struct {
 	Type int
 }
 
+type DockerfileInfo struct {
+	BaseImage, UserName, Email, Location, Port string
+}
+
 var c *client.Client
 
 func init() {
@@ -39,7 +44,7 @@ func init() {
 		}
 	}()
 	httpHead := make(map[string]string)
-	dockerClient, e := client.NewClient("http://192.168.31.188:2375", "1.39", nil, httpHead)
+	dockerClient, e := client.NewClient(beego.AppConfig.String("dockerurl"), beego.AppConfig.String("dockerapiversion"), nil, httpHead)
 	if e != nil {
 		panic(e)
 	}
@@ -53,21 +58,11 @@ func DockerImageBuild(file *io.Reader, simpleBuildInfo *ImageSimpleBuildInfo, ch
 			fmt.Printf("docker build 错误 %s\r\n", e)
 		}
 	}()
-	var reader *io.Reader
-	switch simpleBuildInfo.Type {
-	case NGINX:
-		reader = nginxBuild(file, header)
-	case JAR:
-		reader = jarBuild(file, header)
-	case TOMCAT:
-	case SELF:
-		reader = file
-	default:
-	}
-	build(reader, simpleBuildInfo, ch)
+	reader := preBuild(file, header, simpleBuildInfo.Type)
+	doBuild(reader, simpleBuildInfo, ch)
 }
 
-func nginxBuild(file *io.Reader, header *multipart.FileHeader) *io.Reader {
+func preBuild(file *io.Reader, header *multipart.FileHeader, ty int) *io.Reader {
 	source := rand.NewSource(time.Now().UnixNano())
 	rd := rand.New(source)
 	tempDir := os.TempDir() + "\\docker" + strconv.Itoa(rd.Int())
@@ -90,15 +85,11 @@ func nginxBuild(file *io.Reader, header *multipart.FileHeader) *io.Reader {
 		}
 		target.Close()
 	}
-	dockerFileGen()
-	//var w io.Writer = buffer
-	//Tars(dir, &w)
+	dockerFileGen(ty)
 	err := Tar("./", "docker.tar", false)
 	if err != nil {
 		panic(err)
 	}
-	//var reader io.Reader = bytes.NewReader(buffer.Bytes())
-	//return &reader;
 	f, err := os.Open("docker.tar")
 	if err != nil {
 		panic(err)
@@ -107,41 +98,8 @@ func nginxBuild(file *io.Reader, header *multipart.FileHeader) *io.Reader {
 	return &t
 }
 
-func dockerFileGen() {
-	i := template.New("Dockerfile")
-	parse, e := i.Parse(`FROM  {{.BaseImage}}
-	MAINTAINER  {{.UserName}}  {{.Email}}
-	ADD  ./*   /usr/share/nginx/html/
-	EXPOSE  80`)
-	if e != nil {
-		panic(e)
-	}
-	dockerfile, err := os.Create("Dockerfile")
-	if err != nil {
-		panic(err)
-	}
-	//var byteTemp []byte
-	//buffer := bytes.NewBuffer(byteTemp)
-	err = parse.Execute(dockerfile, struct {
-		BaseImage, UserName, Email string
-	}{"nginx", "wangzhu", "wangzhu@originaltek.com"})
-	if err != nil {
-		panic(err)
-	}
-	dockerfile.Close()
-}
-
-func tomcatBuild(file *io.Reader) *io.Reader {
-	return nil
-}
-
-func jarBuild(file *io.Reader, header *multipart.FileHeader) *io.Reader {
-
-	return nil
-}
-
-func build(file *io.Reader, simpleBuildInfo *ImageSimpleBuildInfo, ch chan<- struct{}) {
-	buildResponse, e := c.ImageBuild(context.Background(), *file, types.ImageBuildOptions{
+func doBuild(reader *io.Reader, simpleBuildInfo *ImageSimpleBuildInfo, ch chan<- struct{}) {
+	buildResponse, e := c.ImageBuild(context.Background(), *reader, types.ImageBuildOptions{
 		Tags:           []string{simpleBuildInfo.Prefix + "/" + simpleBuildInfo.Name + ":" + simpleBuildInfo.Version},
 		SuppressOutput: true,
 		NoCache:        false,
@@ -157,6 +115,50 @@ func build(file *io.Reader, simpleBuildInfo *ImageSimpleBuildInfo, ch chan<- str
 	io.Copy(os.Stdout, body)
 	defer body.Close()
 	ch <- struct{}{}
+}
+
+func dockerFileGen(ty int) {
+	username := beego.AppConfig.String("buildusername")
+	email := beego.AppConfig.String("buildemail")
+	dockerfile, err := os.Create("Dockerfile")
+	if err != nil {
+		panic(err)
+	}
+	i := template.New("Dockerfile")
+	parse, e := i.Parse(`FROM  {{.BaseImage}}
+MAINTAINER  {{.UserName}}  {{.Email}}
+ADD  ./*   {{.Location}}
+EXPOSE  {{.Port}}`)
+	if e != nil {
+		panic(e)
+	}
+	var info DockerfileInfo
+	switch ty {
+	case NGINX:
+		info = DockerfileInfo{
+			BaseImage: "nginx",
+			UserName:  username,
+			Email:     email,
+			Location:  "/usr/share/nginx/html/",
+			Port:      "80",
+		}
+	case JAR:
+	case TOMCAT:
+		info = DockerfileInfo{
+			BaseImage: "tomcat:jdk8",
+			UserName:  username,
+			Email:     email,
+			Location:  " /usr/local/tomcat/webapps/",
+			Port:      "8080",
+		}
+	case SELF:
+	default:
+	}
+	err = parse.Execute(dockerfile, info)
+	if err != nil {
+		panic(err)
+	}
+	dockerfile.Close()
 }
 
 func DockerImagePull(image string) {

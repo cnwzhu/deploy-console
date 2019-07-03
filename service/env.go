@@ -1,5 +1,2 @@
 package service
 
-func ENV() {
-
-}
