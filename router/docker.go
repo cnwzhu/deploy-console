@@ -6,5 +6,6 @@ import (
 )
 
 func init() {
-	beego.Router("/docker", &controller.DockerController{}, "POST:QueryImage")
+	beego.Router("/docker/query", &controller.DockerController{}, "GET:QueryImage")
+	beego.Router("/docker/build", &controller.DockerController{}, "POST:BuildImage")
 }
