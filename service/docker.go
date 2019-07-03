@@ -2,11 +2,13 @@ package service
 
 import (
 	"context"
-	"fmt"
+	"encoding/base64"
+	"encoding/json"
 	"github.com/astaxie/beego/logs"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/client"
 	"io"
+	"io/ioutil"
 	"math/rand"
 	"mime/multipart"
 	"os"
@@ -35,20 +37,18 @@ type DockerfileInfo struct {
 	BaseImage, UserName, Email, Location, Port, Cmd string
 }
 
-var c *client.Client
-
-func init() {
+func NewDockerClient() *client.Client {
 	defer func() {
 		if e := recover(); e != nil {
 			logs.Error("初始化错误 %s\r\n", e)
 		}
 	}()
 	httpHead := make(map[string]string)
-	dockerClient, e := client.NewClient("http://192.168.31.188:2375", "1.39", nil, httpHead)
+	dockerClient, e := client.NewClient("http://192.168.31.185:2375", "1.39", nil, httpHead)
 	if e != nil {
 		panic(e)
 	}
-	c = dockerClient
+	return dockerClient
 }
 
 func DockerImageBuild(file *io.Reader, simpleBuildInfo *ImageSimpleBuildInfo, ch chan<- struct{}, header *multipart.FileHeader) {
@@ -112,6 +112,8 @@ func preBuild(file *io.Reader, header *multipart.FileHeader, ty int) *io.Reader 
 }
 
 func doBuild(reader *io.Reader, simpleBuildInfo *ImageSimpleBuildInfo, ch chan<- struct{}) {
+	c := NewDockerClient()
+	defer c.Close()
 	buildResponse, e := c.ImageBuild(context.Background(), *reader, types.ImageBuildOptions{
 		Tags:           []string{simpleBuildInfo.Prefix + "/" + simpleBuildInfo.Name + ":" + simpleBuildInfo.Version},
 		SuppressOutput: true,
@@ -125,8 +127,12 @@ func doBuild(reader *io.Reader, simpleBuildInfo *ImageSimpleBuildInfo, ch chan<-
 		panic(e)
 	}
 	body := buildResponse.Body
-	io.Copy(os.Stdout, body)
 	defer body.Close()
+	bytes, e := ioutil.ReadAll(body)
+	if e != nil {
+		panic(e)
+	}
+	logs.Info(string(bytes))
 	ch <- struct{}{}
 }
 func IsNotNil(item interface{}) bool {
@@ -172,17 +178,36 @@ CMD  {{.Cmd}}{{end}}`)
 }
 
 func DockerImagePull(image string) {
+	c := NewDockerClient()
+	defer c.Close()
 	defer func() {
 		if e := recover(); e != nil {
-			fmt.Printf("docker pull 错误 %s\r\n", e)
+			logs.Error("docker pull 错误 %s\r\n", e)
 		}
 	}()
-	rep, e := c.ImagePull(context.Background(), image, types.ImagePullOptions{})
+	authConfig := types.AuthConfig{
+		Username:      "admin",
+		Password:      "Harbor12345",
+		ServerAddress: "harbor.self.com",
+		Email:         "admin@example.com",
+	}
+	encodedJSON, err := json.Marshal(authConfig)
+	if err != nil {
+		panic(err)
+	}
+	authStr := base64.URLEncoding.EncodeToString(encodedJSON)
+	rep, e := c.ImagePull(context.Background(), image, types.ImagePullOptions{
+		RegistryAuth: authStr,
+	})
 	if e != nil {
 		panic(e)
 	}
-	io.Copy(os.Stdout, rep)
 	defer rep.Close()
+	bytes, e := ioutil.ReadAll(rep)
+	if e != nil {
+		panic(e)
+	}
+	logs.Info(string(bytes))
 }
 
 func DockerImageList() {
@@ -193,6 +218,35 @@ func DockerImageQuery() {
 
 }
 
-func DockerImagePush() {
-
+func DockerImagePush(image string, ch chan<- struct{}) {
+	defer func() {
+		if e := recover(); e != nil {
+			close(ch)
+			logs.Error("docker push 错误 %s\r\n", e)
+		}
+	}()
+	c := NewDockerClient()
+	defer c.Close()
+	authConfig := types.AuthConfig{
+		Username:      "admin",
+		Password:      "Harbor12345",
+		ServerAddress: "harbor.self.com",
+		Email:         "admin@example.com",
+	}
+	encodedJSON, err := json.Marshal(authConfig)
+	if err != nil {
+		panic(err)
+	}
+	authStr := base64.URLEncoding.EncodeToString(encodedJSON)
+	rsp, err := c.ImagePush(context.Background(), image, types.ImagePushOptions{RegistryAuth: authStr,})
+	if err != nil {
+		panic(err)
+	}
+	defer rsp.Close()
+	bytes, e := ioutil.ReadAll(rsp)
+	if e != nil {
+		panic(e)
+	}
+	logs.Info(string(bytes))
+	ch <- struct{}{}
 }

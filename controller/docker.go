@@ -2,12 +2,9 @@ package controller
 
 import (
 	"console/service"
-	"encoding/json"
 	"github.com/astaxie/beego"
 	"github.com/astaxie/beego/logs"
 	"io"
-	"io/ioutil"
-	"log"
 	"strconv"
 )
 
@@ -24,18 +21,22 @@ func (it *QueryImageInfo) String() string {
 }
 
 func (it *DockerController) QueryImage() {
-	var info QueryImageInfo
-	b := it.Ctx.Request.Body
-	defer b.Close()
-	all, _ := ioutil.ReadAll(b)
-	log.Println(string(all))
-	json.Unmarshal(all, &info)
-	log.Println(info)
-	bytes, _ := json.Marshal(info)
-	it.Ctx.Output.Body(bytes)
+
 }
 
-func (it *DockerController) BuildImage()  {
+func (it *DockerController) PushImage() {
+	defer func() {
+		if e := recover(); e != nil {
+			logs.Error(" 错误 %s\r\n", e)
+		}
+	}()
+	flag := make(chan struct{})
+	defer close(flag)
+	service.DockerImagePush("", flag)
+	<-flag
+}
+
+func (it *DockerController) BuildImage() {
 	defer func() {
 		if e := recover(); e != nil {
 			logs.Error(" 错误 %s\r\n", e)
@@ -57,7 +58,14 @@ func (it *DockerController) BuildImage()  {
 	flag := make(chan struct{})
 	defer close(flag)
 	go service.DockerImageBuild(&r, info, flag, header)
+	logs.Info("开始build")
 	<-flag
+	logs.Info("build结束")
+	logs.Info("开始push")
+	logs.Info("full name: "+info.Prefix+"/"+info.Name+":"+info.Version)
+	go service.DockerImagePush(info.Prefix+"/"+info.Name+":"+info.Version, flag)
+	<-flag
+	logs.Info("push结束")
 	e = it.Ctx.Output.Body([]byte(`{"msg":"ok"}`))
 	if e != nil {
 		panic(e)
