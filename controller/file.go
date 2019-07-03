@@ -2,8 +2,8 @@ package controller
 
 import (
 	"console/service"
-	"fmt"
 	"github.com/astaxie/beego"
+	"github.com/astaxie/beego/logs"
 	"io"
 	"strconv"
 )
@@ -15,7 +15,7 @@ type FileController struct {
 func (it *FileController) Upload() {
 	defer func() {
 		if e := recover(); e != nil {
-			fmt.Printf(" 错误 %s\r\n", e)
+			logs.Error(" 错误 %s\r\n", e)
 		}
 	}()
 	file, header, e := it.GetFile("image_file")

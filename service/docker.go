@@ -3,7 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
-	"github.com/astaxie/beego"
+	"github.com/astaxie/beego/logs"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/client"
 	"io"
@@ -17,11 +17,11 @@ import (
 )
 
 const (
-	_ = iota
+	NO = iota
 	NGINX
 	TOMCAT
 	JAR
-	SELF
+	DEFAULT
 )
 
 type ImageSimpleBuildInfo struct {
@@ -40,11 +40,11 @@ var c *client.Client
 func init() {
 	defer func() {
 		if e := recover(); e != nil {
-			fmt.Printf("初始化错误 %s\r\n", e)
+			logs.Error("初始化错误 %s\r\n", e)
 		}
 	}()
 	httpHead := make(map[string]string)
-	dockerClient, e := client.NewClient(beego.AppConfig.String("dockerurl"), beego.AppConfig.String("dockerapiversion"), nil, httpHead)
+	dockerClient, e := client.NewClient("http://192.168.31.188:2375", "1.39", nil, httpHead)
 	if e != nil {
 		panic(e)
 	}
@@ -55,10 +55,10 @@ func DockerImageBuild(file *io.Reader, simpleBuildInfo *ImageSimpleBuildInfo, ch
 	defer func() {
 		if e := recover(); e != nil {
 			close(ch)
-			fmt.Printf("docker build 错误 %s\r\n", e)
+			logs.Error("docker build 错误 %s\r\n", e)
 		}
 	}()
-	if simpleBuildInfo.Type == SELF {
+	if simpleBuildInfo.Type == NO {
 		doBuild(file, simpleBuildInfo, ch)
 	} else {
 		reader := preBuild(file, header, simpleBuildInfo.Type)
@@ -98,7 +98,7 @@ func preBuild(file *io.Reader, header *multipart.FileHeader, ty int) *io.Reader 
 			panic(e)
 		}
 	}
-	dockerFileGen(ty)
+	dockerFileGen(ty, header.Filename)
 	err = Tar("./", "docker.tar", false)
 	if err != nil {
 		panic(err)
@@ -132,9 +132,10 @@ func doBuild(reader *io.Reader, simpleBuildInfo *ImageSimpleBuildInfo, ch chan<-
 func IsNotNil(item interface{}) bool {
 	return item != nil
 }
-func dockerFileGen(ty int) {
-	username := beego.AppConfig.String("buildusername")
-	email := beego.AppConfig.String("buildemail")
+func dockerFileGen(ty int, name string) {
+	username := "wangzhu"
+	email := "wang-zhu@live.com"
+	logs.Info("username: %v ,email: %v", username, email)
 	dockerfile, err := os.Create("Dockerfile")
 	if err != nil {
 		panic(err)
@@ -155,9 +156,11 @@ CMD  {{.Cmd}}{{end}}`)
 	case NGINX:
 		info = DockerfileInfo{BaseImage: "nginx", UserName: username, Email: email, Location: "/usr/share/nginx/html/", Port: "80",}
 	case JAR:
-		info = DockerfileInfo{BaseImage: "openjdk:8", UserName: username, Email: email, Location: "/root/", Port: "80", Cmd: `["java", "-jar","/root/*.jar"]`,}
+		info = DockerfileInfo{BaseImage: "openjdk:8", UserName: username, Email: email, Location: "/root/", Port: "80", Cmd: "java -jar /root/" + name,}
 	case TOMCAT:
 		info = DockerfileInfo{BaseImage: "tomcat:jdk8", UserName: username, Email: email, Location: " /usr/local/tomcat/webapps/", Port: "8080",}
+	case DEFAULT:
+		info = DockerfileInfo{BaseImage: "alpine", UserName: username, Email: email, Location: " /root/", Port: "80", Cmd: "sh  /root/" + name,}
 	default:
 		panic("不支持的打包类型")
 	}
@@ -187,5 +190,9 @@ func DockerImageList() {
 }
 
 func DockerImageQuery() {
+
+}
+
+func DockerImagePush() {
 
 }

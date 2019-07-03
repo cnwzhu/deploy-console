@@ -1,9 +1,9 @@
 package main
 
 import (
+	_ "console/router"
 	"github.com/astaxie/beego"
 )
-import _ "console/router"
 
 func main() {
 	beego.Run()
