@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"github.com/astaxie/beego/config/env"
 	"github.com/astaxie/beego/logs"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/client"
@@ -33,6 +34,8 @@ type ImageSimpleBuildInfo struct {
 	Type int
 }
 
+type Json string
+
 type DockerfileInfo struct {
 	BaseImage, UserName, Email, Location, Port, Cmd string
 }
@@ -43,12 +46,23 @@ func NewDockerClient() *client.Client {
 			logs.Error("初始化错误 %s\r\n", e)
 		}
 	}()
-	httpHead := make(map[string]string)
-	dockerClient, e := client.NewClient("http://192.168.31.185:2375", "1.39", nil, httpHead)
-	if e != nil {
-		panic(e)
+	env := env.Get("ENV", "remote")
+	if env != "remote" {
+		dockerClient, e := client.NewEnvClient()
+		if e != nil {
+			panic(e)
+		}
+		logs.Info("docker.sock 模式")
+		return dockerClient;
+	} else {
+		httpHead := make(map[string]string)
+		dockerClient, e := client.NewClient("http://192.168.31.185:2375", "1.39", nil, httpHead)
+		if e != nil {
+			panic(e)
+		}
+		logs.Info("远程模式")
+		return dockerClient
 	}
-	return dockerClient
 }
 
 func DockerImageBuild(file *io.Reader, simpleBuildInfo *ImageSimpleBuildInfo, ch chan<- struct{}, header *multipart.FileHeader) {
@@ -210,12 +224,58 @@ func DockerImagePull(image string) {
 	logs.Info(string(bytes))
 }
 
-func DockerImageList() {
-
+func DockerImageList() []byte {
+	defer func() {
+		if e := recover(); e != nil {
+			logs.Error("docker list 错误 %s\r\n", e)
+		}
+	}()
+	dockerClient := NewDockerClient()
+	defer dockerClient.Close()
+	imageList, e := dockerClient.ImageList(context.Background(), types.ImageListOptions{})
+	if e != nil {
+		panic(e)
+	}
+	b, e := json.Marshal(struct {
+		ImageList interface{}
+	}{imageList})
+	if e != nil {
+		panic(e)
+	}
+	return b
 }
 
 func DockerImageQuery() {
+	/*	defer func() {
+		if e := recover(); e != nil {
+			close(ch)
+			logs.Error("docker push 错误 %s\r\n", e)
+		}
+	}()*/
+}
 
+func DockerImageDelete(id string) []byte {
+	defer func() {
+		if e := recover(); e != nil {
+			logs.Error("docker push 错误 %s\r\n", e)
+		}
+	}()
+	dockerClient := NewDockerClient()
+	defer dockerClient.Close()
+	remove, e := dockerClient.ImageRemove(context.Background(), id, types.ImageRemoveOptions{
+		Force:         true,
+		PruneChildren: false,
+	})
+	if e != nil {
+		panic(e)
+	}
+	b, e := json.Marshal(struct {
+		DeleteImage interface{}
+	}{remove})
+	if e != nil {
+		panic(e)
+	}
+	return b
 }
 
 func DockerImagePush(image string, ch chan<- struct{}) {

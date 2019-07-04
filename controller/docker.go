@@ -2,9 +2,11 @@ package controller
 
 import (
 	"console/service"
+	"encoding/json"
 	"github.com/astaxie/beego"
 	"github.com/astaxie/beego/logs"
 	"io"
+	"io/ioutil"
 	"strconv"
 )
 
@@ -22,6 +24,45 @@ func (it *QueryImageInfo) String() string {
 
 func (it *DockerController) QueryImage() {
 
+}
+
+func (it *DockerController) ListImage() {
+	defer func() {
+		if e := recover(); e != nil {
+			logs.Error(" 错误 %s\r\n", e)
+		}
+	}()
+	list := service.DockerImageList()
+	e := it.Ctx.Output.Body(list)
+	if e != nil {
+		panic(e)
+	}
+}
+
+func (it *DockerController) DeleteImage() {
+	defer func() {
+		if e := recover(); e != nil {
+			logs.Error(" 错误 %s\r\n", e)
+		}
+	}()
+	body := it.Ctx.Request.Body
+	defer body.Close()
+	readAll, e := ioutil.ReadAll(body)
+	if e != nil {
+		panic(e)
+	}
+	var deleteImage = &struct {
+		Id string
+	}{}
+	e = json.Unmarshal(readAll, deleteImage)
+	if e != nil {
+		panic(e)
+	}
+	list := service.DockerImageDelete(deleteImage.Id)
+	e = it.Ctx.Output.Body(list)
+	if e != nil {
+		panic(e)
+	}
 }
 
 func (it *DockerController) PushImage() {
@@ -62,7 +103,7 @@ func (it *DockerController) BuildImage() {
 	<-flag
 	logs.Info("build结束")
 	logs.Info("开始push")
-	logs.Info("full name: "+info.Prefix+"/"+info.Name+":"+info.Version)
+	logs.Info("full name: " + info.Prefix + "/" + info.Name + ":" + info.Version)
 	go service.DockerImagePush(info.Prefix+"/"+info.Name+":"+info.Version, flag)
 	<-flag
 	logs.Info("push结束")
