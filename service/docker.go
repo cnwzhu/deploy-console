@@ -19,14 +19,21 @@ import (
 	"time"
 )
 
+//build镜像类型
 const (
+	//自己提供Dockerfile
 	NO = iota
+	//基于nginx
 	NGINX
+	//基于tomcat
 	TOMCAT
+	//基于jdk
 	JAR
+	//基于基础镜像
 	DEFAULT
 )
 
+//镜像构建信息
 type ImageSimpleBuildInfo struct {
 	Name,
 	Version,
@@ -34,12 +41,15 @@ type ImageSimpleBuildInfo struct {
 	Type int
 }
 
+//json类型
 type Json string
 
+//dockerfile信息
 type DockerfileInfo struct {
 	BaseImage, UserName, Email, Location, Port, Cmd string
 }
 
+//创建docker客户端
 func NewDockerClient() *client.Client {
 	defer func() {
 		if e := recover(); e != nil {
@@ -65,6 +75,7 @@ func NewDockerClient() *client.Client {
 	}
 }
 
+//build镜像
 func DockerImageBuild(file *io.Reader, simpleBuildInfo *ImageSimpleBuildInfo, ch chan<- struct{}, header *multipart.FileHeader) {
 	defer func() {
 		if e := recover(); e != nil {
@@ -80,6 +91,7 @@ func DockerImageBuild(file *io.Reader, simpleBuildInfo *ImageSimpleBuildInfo, ch
 	}
 }
 
+//镜像构建前置函数
 func preBuild(file *io.Reader, header *multipart.FileHeader, ty int) *io.Reader {
 	source := rand.NewSource(time.Now().UnixNano())
 	rd := rand.New(source)
@@ -125,6 +137,7 @@ func preBuild(file *io.Reader, header *multipart.FileHeader, ty int) *io.Reader 
 	return &t
 }
 
+//构建
 func doBuild(reader *io.Reader, simpleBuildInfo *ImageSimpleBuildInfo, ch chan<- struct{}) {
 	c := NewDockerClient()
 	defer c.Close()
@@ -149,9 +162,13 @@ func doBuild(reader *io.Reader, simpleBuildInfo *ImageSimpleBuildInfo, ch chan<-
 	logs.Info(string(bytes))
 	ch <- struct{}{}
 }
+
+//判断是否为空
 func IsNotNil(item interface{}) bool {
 	return item != nil
 }
+
+//生成dockerfile模板
 func dockerFileGen(ty int, name string) {
 	username := "wangzhu"
 	email := "wang-zhu@live.com"
@@ -191,6 +208,7 @@ CMD  {{.Cmd}}{{end}}`)
 	dockerfile.Close()
 }
 
+//拉取镜像
 func DockerImagePull(image string) {
 	c := NewDockerClient()
 	defer c.Close()
@@ -224,6 +242,7 @@ func DockerImagePull(image string) {
 	logs.Info(string(bytes))
 }
 
+//查询所有镜像
 func DockerImageList() []byte {
 	defer func() {
 		if e := recover(); e != nil {
@@ -254,6 +273,7 @@ func DockerImageQuery() {
 	}()*/
 }
 
+//删除镜像
 func DockerImageDelete(id string) []byte {
 	defer func() {
 		if e := recover(); e != nil {

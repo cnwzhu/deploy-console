@@ -10,22 +10,27 @@ import (
 	"strconv"
 )
 
+//docker控制器
 type DockerController struct {
 	beego.Controller
 }
 
+//查询镜像信息
 type QueryImageInfo struct {
 	Q string `json:"q"`
 }
 
+//对象转string方法
 func (it *QueryImageInfo) String() string {
 	return "q: " + it.Q
 }
 
+//根据参数查询镜像信息
 func (it *DockerController) QueryImage() {
 
 }
 
+//查询所有镜像
 func (it *DockerController) ListImage() {
 	defer func() {
 		if e := recover(); e != nil {
@@ -39,6 +44,7 @@ func (it *DockerController) ListImage() {
 	}
 }
 
+//删除镜像
 func (it *DockerController) DeleteImage() {
 	defer func() {
 		if e := recover(); e != nil {
@@ -65,6 +71,7 @@ func (it *DockerController) DeleteImage() {
 	}
 }
 
+//推送镜像
 func (it *DockerController) PushImage() {
 	defer func() {
 		if e := recover(); e != nil {
@@ -77,6 +84,7 @@ func (it *DockerController) PushImage() {
 	<-flag
 }
 
+//build镜像
 func (it *DockerController) BuildImage() {
 	defer func() {
 		if e := recover(); e != nil {
