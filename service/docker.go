@@ -1,6 +1,7 @@
 package service
 
 import (
+	"console/domain"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -76,10 +77,11 @@ func NewDockerClient() *client.Client {
 }
 
 //build镜像
-func DockerImageBuild(file *io.Reader, simpleBuildInfo *ImageSimpleBuildInfo, header *multipart.FileHeader) {
+func DockerImageBuild(file *io.Reader, simpleBuildInfo *ImageSimpleBuildInfo, header *multipart.FileHeader, ch chan domain.Message) {
 	defer func() {
 		if e := recover(); e != nil {
 			logs.Error("docker build 错误 %s\r\n", e)
+			ch <- domain.Message{Message: "构建失败"}
 		}
 	}()
 	if simpleBuildInfo.Type == NO {
@@ -88,6 +90,7 @@ func DockerImageBuild(file *io.Reader, simpleBuildInfo *ImageSimpleBuildInfo, he
 		reader := preBuild(file, header, simpleBuildInfo.Type)
 		doBuild(reader, simpleBuildInfo)
 	}
+	ch <- domain.Message{Message: "构建完成"}
 }
 
 //镜像构建前置函数
@@ -284,11 +287,11 @@ func DockerImageDelete(id string) []types.ImageDelete {
 	return remove
 }
 
-func DockerImagePush(image string) {
+func DockerImagePush(image string, ch chan domain.Message) {
 	defer func() {
 		if e := recover(); e != nil {
-			close(ch)
 			logs.Error("docker push 错误 %s\r\n", e)
+			ch <- domain.Message{Message: "推送失败"}
 		}
 	}()
 	c := NewDockerClient()
@@ -314,4 +317,5 @@ func DockerImagePush(image string) {
 		panic(e)
 	}
 	logs.Info(string(bytes))
+	ch <- domain.Message{Message: "推送成功"}
 }

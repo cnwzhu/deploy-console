@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"console/domain"
 	"console/service"
 	"encoding/json"
 	"github.com/astaxie/beego/logs"
@@ -28,11 +29,6 @@ type QueryImageInfo struct {
 	Q string `json:"q"`
 }
 
-//socket消息
-type Message struct {
-	Message string `json:"message"`
-}
-
 var (
 	ug = websocket.Upgrader{
 		ReadBufferSize:  1024,
@@ -42,7 +38,7 @@ var (
 		},
 	}
 	buildWsClients   = make(map[*websocket.Conn]bool)
-	buildWsBroadcast = make(chan Message)
+	buildWsBroadcast = make(chan domain.Message)
 )
 
 //对象转string方法
@@ -92,8 +88,8 @@ func (it *DockerController) PushImage() {
 	if strings.TrimSpace(image) == "" {
 		panic("镜像不能为空")
 	}
-	go service.DockerImagePush(image)
-	buildWsBroadcast <- Message{"push完成"}
+	go service.DockerImagePush(image,buildWsBroadcast)
+	buildWsBroadcast <- domain.Message{Message:"push完成"}
 	Return(it.Ctx.Output, nil, nil)
 }
 
@@ -115,13 +111,11 @@ func (it *DockerController) BuildImage() {
 	Return(it.Ctx.Output, nil, nil)
 }
 
-func inner(ch chan Message, file *multipart.File, info *service.ImageSimpleBuildInfo, header *multipart.FileHeader) {
+func inner(ch chan domain.Message, file *multipart.File, info *service.ImageSimpleBuildInfo, header *multipart.FileHeader) {
 	r := (*file).(io.Reader)
-	service.DockerImageBuild(&r, info, header)
-	ch <- Message{"构建完成"}
+	service.DockerImageBuild(&r, info, header,ch)
 	logs.Info("full name: " + info.Prefix + "/" + info.Name + ":" + info.Version)
-	service.DockerImagePush(info.Prefix + "/" + info.Name + ":" + info.Version)
-	ch <- Message{"push完成"}
+	service.DockerImagePush(info.Prefix + "/" + info.Name + ":" + info.Version,ch)
 	defer (*file).Close()
 }
 
@@ -152,5 +146,5 @@ func handleMessages() {
 }
 
 func (it *DockerController) Test() {
-	buildWsBroadcast <- Message{"test ok"}
+	buildWsBroadcast <- domain.Message{Message:"test ok"}
 }
