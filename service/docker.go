@@ -76,18 +76,17 @@ func NewDockerClient() *client.Client {
 }
 
 //build镜像
-func DockerImageBuild(file *io.Reader, simpleBuildInfo *ImageSimpleBuildInfo, ch chan<- struct{}, header *multipart.FileHeader) {
+func DockerImageBuild(file *io.Reader, simpleBuildInfo *ImageSimpleBuildInfo, header *multipart.FileHeader) {
 	defer func() {
 		if e := recover(); e != nil {
-			close(ch)
 			logs.Error("docker build 错误 %s\r\n", e)
 		}
 	}()
 	if simpleBuildInfo.Type == NO {
-		doBuild(file, simpleBuildInfo, ch)
+		doBuild(file, simpleBuildInfo)
 	} else {
 		reader := preBuild(file, header, simpleBuildInfo.Type)
-		doBuild(reader, simpleBuildInfo, ch)
+		doBuild(reader, simpleBuildInfo)
 	}
 }
 
@@ -138,7 +137,7 @@ func preBuild(file *io.Reader, header *multipart.FileHeader, ty int) *io.Reader 
 }
 
 //构建
-func doBuild(reader *io.Reader, simpleBuildInfo *ImageSimpleBuildInfo, ch chan<- struct{}) {
+func doBuild(reader *io.Reader, simpleBuildInfo *ImageSimpleBuildInfo) {
 	c := NewDockerClient()
 	defer c.Close()
 	buildResponse, e := c.ImageBuild(context.Background(), *reader, types.ImageBuildOptions{
@@ -160,7 +159,6 @@ func doBuild(reader *io.Reader, simpleBuildInfo *ImageSimpleBuildInfo, ch chan<-
 		panic(e)
 	}
 	logs.Info(string(bytes))
-	ch <- struct{}{}
 }
 
 //判断是否为空
@@ -286,7 +284,7 @@ func DockerImageDelete(id string) []types.ImageDelete {
 	return remove
 }
 
-func DockerImagePush(image string, ch chan<- struct{}) {
+func DockerImagePush(image string) {
 	defer func() {
 		if e := recover(); e != nil {
 			close(ch)
@@ -316,5 +314,4 @@ func DockerImagePush(image string, ch chan<- struct{}) {
 		panic(e)
 	}
 	logs.Info(string(bytes))
-	ch <- struct{}{}
 }

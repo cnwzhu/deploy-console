@@ -8,6 +8,7 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
+	"mime/multipart"
 	"net/http"
 	"strconv"
 	"strings"
@@ -91,10 +92,8 @@ func (it *DockerController) PushImage() {
 	if strings.TrimSpace(image) == "" {
 		panic("镜像不能为空")
 	}
-	flag := make(chan struct{})
-	defer close(flag)
-	go service.DockerImagePush(image, flag)
-	<-flag
+	go service.DockerImagePush(image)
+	buildWsBroadcast <- Message{"push完成"}
 	Return(it.Ctx.Output, nil, nil)
 }
 
@@ -112,20 +111,18 @@ func (it *DockerController) BuildImage() {
 		Prefix:  it.Ctx.Request.Form.Get("image_prefix"),
 		Type:    i,
 	}
-	defer file.Close()
-	r := file.(io.Reader)
-	flag := make(chan struct{})
-	defer close(flag)
-	go service.DockerImageBuild(&r, info, flag, header)
-	logs.Info("开始build")
-	<-flag
-	logs.Info("build结束")
-	logs.Info("开始push")
-	logs.Info("full name: " + info.Prefix + "/" + info.Name + ":" + info.Version)
-	go service.DockerImagePush(info.Prefix+"/"+info.Name+":"+info.Version, flag)
-	<-flag
-	logs.Info("push结束")
+	go inner(buildWsBroadcast, &file, info, header)
 	Return(it.Ctx.Output, nil, nil)
+}
+
+func inner(ch chan Message, file *multipart.File, info *service.ImageSimpleBuildInfo, header *multipart.FileHeader) {
+	r := (*file).(io.Reader)
+	service.DockerImageBuild(&r, info, header)
+	ch <- Message{"构建完成"}
+	logs.Info("full name: " + info.Prefix + "/" + info.Name + ":" + info.Version)
+	service.DockerImagePush(info.Prefix + "/" + info.Name + ":" + info.Version)
+	ch <- Message{"push完成"}
+	defer (*file).Close()
 }
 
 func (it *DockerController) ImageBuildWebsocketRegister() {
@@ -141,6 +138,7 @@ func handleMessages() {
 	for {
 		msg := <-buildWsBroadcast
 		logs.Info("clients len ", len(buildWsClients))
+		logs.Info(msg.Message)
 		for client := range buildWsClients {
 			err := client.WriteJSON(msg)
 			if err != nil {
