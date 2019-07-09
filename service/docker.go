@@ -252,10 +252,10 @@ func DockerImageList() []types.ImageSummary {
 	dockerClient := NewDockerClient()
 	defer dockerClient.Close()
 	imageList, e := dockerClient.ImageList(context.Background(), types.ImageListOptions{})
-	if e!=nil {
+	if e != nil {
 		panic(e)
 	}
-    return imageList
+	return imageList
 }
 
 func DockerImageQuery() {
@@ -268,7 +268,7 @@ func DockerImageQuery() {
 }
 
 //删除镜像
-func DockerImageDelete(id string)[]types.ImageDelete{
+func DockerImageDelete(id string) []types.ImageDelete {
 	defer func() {
 		if e := recover(); e != nil {
 			logs.Error("docker push 错误 %s\r\n", e)

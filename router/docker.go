@@ -27,4 +27,6 @@ func init() {
 	beego.Router("/docker/image/push", &controller.DockerController{}, "POST:PushImage")
 	//删除镜像
 	beego.Router("/docker/image/delete", &controller.DockerController{}, "DELETE:DeleteImage")
+
+	beego.Router("/docker/image/test", &controller.DockerController{}, "GET:Test")
 }

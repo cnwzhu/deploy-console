@@ -8,6 +8,7 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
+	"net/http"
 	"strconv"
 	"strings"
 )
@@ -32,7 +33,10 @@ type Message struct {
 }
 
 var (
-	upgrader  = websocket.Upgrader{}
+	upgrader = websocket.Upgrader{
+		ReadBufferSize:  1024,
+		WriteBufferSize: 1024,
+	}
 	clients   = make(map[*websocket.Conn]bool)
 	broadcast = make(chan Message)
 )
@@ -122,6 +126,10 @@ func (it *DockerController) BuildImage() {
 }
 
 func (it *DockerController) ImageBuildWebsocketRegister() {
+	defer DeferFunc(it.Ctx.Output)
+	upgrader.CheckOrigin = func(r *http.Request) bool {
+		return true
+	}
 	ws, err := upgrader.Upgrade(it.Ctx.ResponseWriter, it.Ctx.Request, nil)
 	if err != nil {
 		log.Fatal(err)
@@ -143,4 +151,8 @@ func handleMessages() {
 			}
 		}
 	}
+}
+
+func (it *DockerController) Test() {
+	broadcast <- Message{"test ok"}
 }
