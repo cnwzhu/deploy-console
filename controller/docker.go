@@ -137,7 +137,8 @@ func handleMessages() {
 			err := client.WriteJSON(msg)
 			if err != nil {
 				log.Printf("client.WriteJSON error: %v", err)
-				client.Close()
+				e := client.Close()
+				log.Printf("client.WriteJSON error: %v", e)
 				delete(clients, client)
 			}
 		}
