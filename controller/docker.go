@@ -33,12 +33,15 @@ type Message struct {
 }
 
 var (
-	upgrader = websocket.Upgrader{
+	ug = websocket.Upgrader{
 		ReadBufferSize:  1024,
 		WriteBufferSize: 1024,
+		CheckOrigin: func(r *http.Request) bool {
+			return true
+		},
 	}
-	clients   = make(map[*websocket.Conn]bool)
-	broadcast = make(chan Message)
+	buildWsClients   = make(map[*websocket.Conn]bool)
+	buildWsBroadcast = make(chan Message)
 )
 
 //对象转string方法
@@ -127,32 +130,29 @@ func (it *DockerController) BuildImage() {
 
 func (it *DockerController) ImageBuildWebsocketRegister() {
 	defer DeferFunc(it.Ctx.Output)
-	upgrader.CheckOrigin = func(r *http.Request) bool {
-		return true
-	}
-	ws, err := upgrader.Upgrade(it.Ctx.ResponseWriter, it.Ctx.Request, nil)
+	ws, err := ug.Upgrade(it.Ctx.ResponseWriter, it.Ctx.Request, nil)
 	if err != nil {
 		log.Fatal(err)
 	}
-	clients[ws] = true
+	buildWsClients[ws] = true
 }
 
 func handleMessages() {
 	for {
-		msg := <-broadcast
-		logs.Info("clients len ", len(clients))
-		for client := range clients {
+		msg := <-buildWsBroadcast
+		logs.Info("clients len ", len(buildWsClients))
+		for client := range buildWsClients {
 			err := client.WriteJSON(msg)
 			if err != nil {
 				log.Printf("client.WriteJSON error: %v", err)
 				e := client.Close()
 				log.Printf("client.WriteJSON error: %v", e)
-				delete(clients, client)
+				delete(buildWsClients, client)
 			}
 		}
 	}
 }
 
 func (it *DockerController) Test() {
-	broadcast <- Message{"test ok"}
+	buildWsBroadcast <- Message{"test ok"}
 }
