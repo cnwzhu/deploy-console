@@ -4,11 +4,17 @@ import (
 	"console/service"
 	"encoding/json"
 	"github.com/astaxie/beego/logs"
+	"github.com/gorilla/websocket"
 	"io"
 	"io/ioutil"
+	"log"
 	"strconv"
 	"strings"
 )
+
+func init() {
+	go handleMessages()
+}
 
 //docker控制器
 type DockerController struct {
@@ -19,6 +25,17 @@ type DockerController struct {
 type QueryImageInfo struct {
 	Q string `json:"q"`
 }
+
+//socket消息
+type Message struct {
+	Message string `json:"message"`
+}
+
+var (
+	upgrader  = websocket.Upgrader{}
+	clients   = make(map[*websocket.Conn]bool)
+	broadcast = make(chan Message)
+)
 
 //对象转string方法
 func (it *QueryImageInfo) String() string {
@@ -102,4 +119,27 @@ func (it *DockerController) BuildImage() {
 	<-flag
 	logs.Info("push结束")
 	Return(it.Ctx.Output, nil, nil)
+}
+
+func (it *DockerController) ImageBuildWebsocketRegister() {
+	ws, err := upgrader.Upgrade(it.Ctx.ResponseWriter, it.Ctx.Request, nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+	clients[ws] = true
+}
+
+func handleMessages() {
+	for {
+		msg := <-broadcast
+		logs.Info("clients len ", len(clients))
+		for client := range clients {
+			err := client.WriteJSON(msg)
+			if err != nil {
+				log.Printf("client.WriteJSON error: %v", err)
+				client.Close()
+				delete(clients, client)
+			}
+		}
+	}
 }
