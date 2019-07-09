@@ -1,13 +1,11 @@
 package controller
 
-import (
-	"github.com/astaxie/beego"
-)
-
 type RegisterController struct {
-	beego.Controller
+	BaseController
 }
 
-func (it *RegisterController) PushImage() {
-
+func (it *RegisterController) QueryRegisterPrefix() {
+	defer DeferFunc(it.Ctx.Output)
+	rt := []string{"192.168.31.188/test"}
+	Return(it.Ctx.Output, rt, nil)
 }

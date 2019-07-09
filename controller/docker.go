@@ -3,16 +3,16 @@ package controller
 import (
 	"console/service"
 	"encoding/json"
-	"github.com/astaxie/beego"
 	"github.com/astaxie/beego/logs"
 	"io"
 	"io/ioutil"
 	"strconv"
+	"strings"
 )
 
 //docker控制器
 type DockerController struct {
-	beego.Controller
+	BaseController
 }
 
 //查询镜像信息
@@ -32,25 +32,14 @@ func (it *DockerController) QueryImage() {
 
 //查询所有镜像
 func (it *DockerController) ListImage() {
-	defer func() {
-		if e := recover(); e != nil {
-			logs.Error(" 错误 %s\r\n", e)
-		}
-	}()
+	defer DeferFunc(it.Ctx.Output)
 	list := service.DockerImageList()
-	e := it.Ctx.Output.Body(list)
-	if e != nil {
-		panic(e)
-	}
+	Return(it.Ctx.Output, list, nil)
 }
 
 //删除镜像
 func (it *DockerController) DeleteImage() {
-	defer func() {
-		if e := recover(); e != nil {
-			logs.Error(" 错误 %s\r\n", e)
-		}
-	}()
+	defer DeferFunc(it.Ctx.Output)
 	body := it.Ctx.Request.Body
 	defer body.Close()
 	readAll, e := ioutil.ReadAll(body)
@@ -64,33 +53,30 @@ func (it *DockerController) DeleteImage() {
 	if e != nil {
 		panic(e)
 	}
-	list := service.DockerImageDelete(deleteImage.Id)
-	e = it.Ctx.Output.Body(list)
-	if e != nil {
-		panic(e)
+	if strings.TrimSpace(deleteImage.Id) == "" {
+		panic("删除镜像不能为空")
 	}
+	list := service.DockerImageDelete(deleteImage.Id)
+	Return(it.Ctx.Output, list, nil)
 }
 
 //推送镜像
 func (it *DockerController) PushImage() {
-	defer func() {
-		if e := recover(); e != nil {
-			logs.Error(" 错误 %s\r\n", e)
-		}
-	}()
+	defer DeferFunc(it.Ctx.Output)
+	image := it.Ctx.Request.Form.Get("image")
+	if strings.TrimSpace(image) == "" {
+		panic("镜像不能为空")
+	}
 	flag := make(chan struct{})
 	defer close(flag)
-	service.DockerImagePush("", flag)
+	go service.DockerImagePush(image, flag)
 	<-flag
+	Return(it.Ctx.Output, nil, nil)
 }
 
 //build镜像
 func (it *DockerController) BuildImage() {
-	defer func() {
-		if e := recover(); e != nil {
-			logs.Error(" 错误 %s\r\n", e)
-		}
-	}()
+	defer DeferFunc(it.Ctx.Output)
 	file, header, e := it.GetFile("image_file")
 	if e != nil {
 		panic(e)
@@ -115,8 +101,5 @@ func (it *DockerController) BuildImage() {
 	go service.DockerImagePush(info.Prefix+"/"+info.Name+":"+info.Version, flag)
 	<-flag
 	logs.Info("push结束")
-	e = it.Ctx.Output.Body([]byte(`{"msg":"ok"}`))
-	if e != nil {
-		panic(e)
-	}
+	Return(it.Ctx.Output, nil, nil)
 }
