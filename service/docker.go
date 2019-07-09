@@ -243,7 +243,7 @@ func DockerImagePull(image string) {
 }
 
 //查询所有镜像
-func DockerImageList() []byte {
+func DockerImageList() []types.ImageSummary {
 	defer func() {
 		if e := recover(); e != nil {
 			logs.Error("docker list 错误 %s\r\n", e)
@@ -252,16 +252,10 @@ func DockerImageList() []byte {
 	dockerClient := NewDockerClient()
 	defer dockerClient.Close()
 	imageList, e := dockerClient.ImageList(context.Background(), types.ImageListOptions{})
-	if e != nil {
+	if e!=nil {
 		panic(e)
 	}
-	b, e := json.Marshal(struct {
-		ImageList interface{}
-	}{imageList})
-	if e != nil {
-		panic(e)
-	}
-	return b
+    return imageList
 }
 
 func DockerImageQuery() {
@@ -274,7 +268,7 @@ func DockerImageQuery() {
 }
 
 //删除镜像
-func DockerImageDelete(id string) []byte {
+func DockerImageDelete(id string)[]types.ImageDelete{
 	defer func() {
 		if e := recover(); e != nil {
 			logs.Error("docker push 错误 %s\r\n", e)
@@ -289,13 +283,7 @@ func DockerImageDelete(id string) []byte {
 	if e != nil {
 		panic(e)
 	}
-	b, e := json.Marshal(struct {
-		DeleteImage interface{}
-	}{remove})
-	if e != nil {
-		panic(e)
-	}
-	return b
+	return remove
 }
 
 func DockerImagePush(image string, ch chan<- struct{}) {
